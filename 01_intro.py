@@ -38,6 +38,12 @@ model = tf.keras.Sequential([l0])
 # This is the step size taken when adjusting values in the model.
 model.compile(loss='mean_squared_error',optimizer=tf.keras.optimizers.Adam(0.1))
 
+#------------fit()-----------------#
+# The fit method returns a history object. 
+# We can use this object to plot how the loss
+# of our model goes down after each training epoch. 
+# A high loss means that the Fahrenheit degrees the model predicts
+# is far from the corresponding value in fahrenheit_a.
 #------------arg1/input------------#
 # Input values as array in this case celsius_q.
 #------------arg2/output-----------#
@@ -48,13 +54,21 @@ model.compile(loss='mean_squared_error',optimizer=tf.keras.optimizers.Adam(0.1))
 # The verbose argument controls how much output the method produces.
 history = model.fit(celsius_q, fahrenheit_a, epochs=500, verbose=False)
 
-#------------fit()-----------------#
-# The fit method returns a history object. 
-# We can use this object to plot how the loss
-# of our model goes down after each training epoch. 
-# A high loss means that the Fahrenheit degrees the model predicts
-# is far from the corresponding value in fahrenheit_a.
+#------------matplotlib------------#
 plt.xlabel('Epoch Number')
 plt.ylabel("Loss Magnitude")
 plt.plot(history.history['loss'])
 plt.show()
+
+#------------predict()-------------#
+# You can use the predict method to have it calculate
+# the Fahrenheit degrees for a previously unknown Celsius degrees.
+# Remember, 100 Celsius was not part of our training data.
+print(model.predict([100.0]))# Close plt tp print.
+
+#------------l0.get_weights()------#
+# Finally, let's print the internal variables of the Dense layer. 
+# The first variable is close to ~1.8 and the second to ~32. 
+# These values (1.8 and 32) are the actual variables in the real conversion formula.
+# The conversion equation, f=1.8c+32.
+print("These are the layer variables: {}".format(l0.get_weights()))
