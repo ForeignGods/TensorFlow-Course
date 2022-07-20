@@ -1,13 +1,12 @@
 import bpy
 import tensorflow as tf
+from tensorflow.keras import backend as K
 from tensorflow.keras import layers, Model, callbacks
 from tensorflow.python.training import py_checkpoint_reader
 
-# Import TensorFlow Datasets
 import tensorflow_datasets as tfds
 tfds.disable_progress_bar()
 
-# Helper libraries
 import math
 import numpy as np
 from numpy import array
@@ -19,225 +18,237 @@ import logging
 logger = tf.get_logger()
 logger.setLevel(logging.ERROR)
 
-#delete every existing object
-for ob in bpy.data.objects:   
-    bpy.data.objects.remove(ob)
-    
-for material in bpy.data.materials:
-        bpy.data.materials.remove(material, do_unlink=True)
+############################################################
+# Reset Data
+############################################################
 
-#------------load()---------------#
-# Loading dataset returns dataset and metadata
-#-------dataset['train']----------#
-# Gets train_dataset 60'000 images
-#-------dataset['test']-----------#
-# Gets test_dataset 10'000 images
-dataset, metadata = tfds.load('fashion_mnist', as_supervised=True, with_info=True)
-train_dataset, test_dataset = dataset['train'], dataset['test']
+def reset_data():
 
-#-------features['label']---------#
-# create array with all names of label
-# T-shirt/top, Trouser, Pullover etc.
-class_names = metadata.features['label'].names
-
-#---splits['train'].num_examples--#
-# Returns total number of images of datasets
-num_train_examples = metadata.splits['train'].num_examples
-num_test_examples = metadata.splits['test'].num_examples
-
-#---------normalize---------------#
-# Function to convert grayscale values
-# From 0-255 to 0-1
-def normalize(images, labels):
-  images = tf.cast(images, tf.float32)
-  images /= 255
-  return images, labels
-
-#---------map()-------------------#
-# The map function applies the normalize function to each element 
-# in the train and test datasets
-train_dataset =  train_dataset.map(normalize)
-test_dataset  =  test_dataset.map(normalize)
-
-#---------cache()-----------------#
-# The first time you use the dataset, the images will be loaded from disk
-# Caching will keep them in memory, making training faster
-train_dataset =  train_dataset.cache()
-test_dataset  =  test_dataset.cache()
-
-mc = tf.keras.callbacks.ModelCheckpoint('C:\Temp', save_weights_only=True, period=1)
-                                     
-#------tf.keras.layers.Flatten-----#
-# Input layer
-# This layer transforms the images from a 2d-array of 28 × 28 pixels,
-# to a 1d-array of 784 pixels (28*28). 
-# Think of this layer as unstacking rows of pixels in the image and lining them up. 
-# This layer has no parameters to learn, as it only reformats the data.
-#------tf.keras.layers.Dense-------#
-# Hidden Layer
-# A densely connected layer of 128 neurons.
-# Each neuron (or node) takes input from all 784 nodes in the previous layer,
-# weighting that input according to hidden parameters which will be learned during training, 
-# and outputs a single value to the next layer.
-#------tf.keras.layers.Dense--------#
-# Output Layer
-# A 128-neuron, followed by 10-node softmax layer. 
-# Each node represents a class of clothing. 
-# As in the previous layer, 
-# the final layer takes input from the 128 nodes in the layer before it, 
-# and outputs a value in the range [0, 1], 
-# representing the probability that the image belongs to that class. 
-# The sum of all 10 node values is 1.
-model = tf.keras.Sequential([
-    tf.keras.layers.Flatten(input_shape=(28, 28, 1)),
-    tf.keras.layers.Dense(100, activation=tf.nn.relu),
-    tf.keras.layers.Dense(10, activation=tf.nn.softmax)
-])
-
-#----------loss function------------#
-# An algorithm for measuring how far the model's outputs are from the desired output. 
-# The goal of training is this measures loss.
-#---------Optimizer-----------------#
-# An algorithm for adjusting the inner parameters of the model in order to minimize loss.
-#---------Metrics-------------------#
-# Used to monitor the training and testing steps. 
-# The following example uses accuracy, the fraction of the images that are correctly classified.
-model.compile(optimizer='adam', loss=tf.keras.losses.SparseCategoricalCrossentropy(), metrics=['accuracy'])
-
-#---------math.-------------------#
-#---.shuffle(num_train_examples)--#
-# Randomizes the order so our model cannot learn anything from the order of the examples.
-#-------.batch(BATCH_SIZE)--------#
-#  Tells model.fit to use batches of 32 images and labels when updating the model variables.
-#--------.repeat()----------------#
-# As soon as all the entries are read from the dataset and you try to read the next element, 
-# the dataset will throw an error. 
-# That's where .repeat() comes into play. 
-# It will re-initialize the dataset.
-BATCH_SIZE = 32
-train_dataset = train_dataset.cache().repeat().shuffle(num_train_examples).batch(BATCH_SIZE)
-test_dataset = test_dataset.cache().batch(BATCH_SIZE)
-
-#---------epochs------------------#
-# The epochs=5 parameter limits training to 5 full iterations of the training dataset, 
-# so a total of 5 * 60000 = 300000 examples.
-
-model.fit(train_dataset, epochs=5, callbacks=[mc], steps_per_epoch=num_train_examples/BATCH_SIZE)
-
-#print(mc)
-#print(callback_custom.layer_1_list)
-
-#-----------evaluate()------------#
-# Next, compare how the model performs on the test dataset. 
-# Use all examples we have in the test dataset to assess accuracy.
-#test_loss, test_accuracy = model.evaluate(test_dataset, steps=math.ceil(num_test_examples/32))
-#print('Accuracy on test dataset:', test_accuracy)
-
-reader = py_checkpoint_reader.NewCheckpointReader('C:\Temp')
-
-state_dict = {
-    v: reader.get_tensor(v) for v in reader.get_variable_to_shape_map()
-}
-
-print(state_dict.keys())
-print(type(state_dict))
-array_100 = state_dict['layer_with_weights-0/bias/.ATTRIBUTES/VARIABLE_VALUE']
-#print(array_784_100)
+    for ob in bpy.data.objects:   
+        bpy.data.objects.remove(ob)
         
-#print(dir(bpy.context.active_object))#get all attributes
+    for material in bpy.data.materials:
+            bpy.data.materials.remove(material, do_unlink=True)
 
-#print(array_784_100.shape)
+    for cur in bpy.data.curves:
+        bpy.data.curves.remove(cur)
 
-for key in state_dict:
-    obj = reader.get_tensor(key)
-    if isinstance(obj, np.ndarray):
-        print("tensor_name: ", key)
-        print("type:  ", type(reader.get_tensor(key)))
-        #print("np.ndarray:  ", reader.get_tensor(key))
-        print("np.ndarray:  ", reader.get_tensor(key).shape)
-
-#for row in range(28):
-#    for col in range(28):
-#        bpy.ops.mesh.primitive_cube_add(location = (row * 2, col * 2, 0))
-#        bpy.context.active_object.name = 'input'.format(row).format(col)
-
-materials = []
-for row in range(10):
-    for col in range(10):
-        bpy.ops.mesh.primitive_ico_sphere_add(location = (row * 6 ,col * 6 , -25))
-        bpy.context.active_object.name = 'hidden'.format(row).format(col)
-        activeObject = bpy.context.active_object #Set active object to variable
-        material = bpy.data.materials.new(name = "Basic")
-        material.use_nodes = True
-        bpy.context.object.active_material = material
-        principled_node = material.node_tree.nodes.get("Principled BSDF")
-        principled_node.inputs[19].default_value = (1,1,1,1)
-        principled_node.inputs[20].default_value = 10
-        activeObject.data.materials.append(material)
-        materials.append(material)
+############################################################
+# Training
+############################################################
         
-i = 0
-for x in array_100:
+def training():
 
-    principled_node = materials[i].node_tree.nodes.get("Principled BSDF")
-    principled_node.inputs[20].default_value = x
+    dataset, metadata = tfds.load('fashion_mnist', as_supervised=True, with_info=True)
+    train_dataset, test_dataset = dataset['train'], dataset['test']
+
+    class_names = metadata.features['label'].names
+
+    num_train_examples = metadata.splits['train'].num_examples
+    num_test_examples = metadata.splits['test'].num_examples
+
+    def normalize(images, labels):
+      images = tf.cast(images, tf.float32)
+      images /= 255
+      return images, labels
+
+    train_dataset =  train_dataset.map(normalize)
+    test_dataset  =  test_dataset.map(normalize)
+
+    train_dataset =  train_dataset.cache()
+    test_dataset  =  test_dataset.cache()
+
+    mc = tf.keras.callbacks.ModelCheckpoint(filepath='weights.{epoch:02d}', save_weights_only=True, verbose=1, save_freq='epoch', )
+    prediction_mc = tf.keras.callbacks.ModelCheckpoint(filepath='peights.{epoch:02d}', save_weights_only=True, verbose=1, save_freq=0, )
+    #C:\Program Files\Blender Foundation\Blender 3.2 saves weights at this location
+                                        
+    model = tf.keras.Sequential([
+        tf.keras.layers.Flatten(input_shape=(28, 28, 1)),
+        tf.keras.layers.Dense(25, activation=tf.nn.relu),
+        tf.keras.layers.Dense(10, activation=tf.nn.softmax)
+    ])
+
+    model.compile(optimizer='adam', loss=tf.keras.losses.SparseCategoricalCrossentropy(), metrics=['accuracy'])
+
+    BATCH_SIZE = 32
+    train_dataset = train_dataset.cache().shuffle(num_train_examples).batch(BATCH_SIZE)
+
+    model.fit(train_dataset, epochs=5, callbacks=[mc], steps_per_epoch=num_train_examples/BATCH_SIZE)
+
+    BATCH_SIZE = 1
+    test_dataset = test_dataset.cache().batch(BATCH_SIZE)
+
+    test_dataset = test_dataset.take(1000)
+
+    train_images = []
+    train_labels = []
+    for train_image, train_label in test_dataset:
+        train_image = train_image.numpy()
+        train_label = train_label.numpy()
+        train_images.append(train_image)
+        train_labels.append(train_label)
+
+    print(train_images)
+    print(train_labels)
+
+    model.fit(train_dataset, epochs=1000, callbacks=[prediction_mc], steps_per_epoch=1)
+
+    weight_784_25_list = []
+    weight_25_10_list = []
+    path = 'C:\Program Files\Blender Foundation\Blender 3.2\peights.{zero}{index}'
+
+    for i in range(1, 1000):
+        if i <= 9:
+            reader = py_checkpoint_reader.NewCheckpointReader(path.format(zero = 0, index = i))        
+        else:
+            reader = py_checkpoint_reader.NewCheckpointReader(path.format(zero = "", index = i))  
+
+        state_dict = {
+            v: reader.get_tensor(v) for v in reader.get_variable_to_shape_map()
+        }
+        weight_784_25_list.append(state_dict['layer_with_weights-0/kernel/.OPTIMIZER_SLOT/optimizer/v/.ATTRIBUTES/VARIABLE_VALUE'])
+        weight_25_10_list.append(state_dict['layer_with_weights-1/kernel/.OPTIMIZER_SLOT/optimizer/m/.ATTRIBUTES/VARIABLE_VALUE'])
+
+    return weight_784_25_list, weight_25_10_list, train_images, train_labels
+   
+############################################################
+# Create Nodes
+############################################################
     
-    i += 1
+def create_nodes():
+    for row in range(28):
+        for col in range(28):
+            bpy.ops.mesh.primitive_cube_add(location = (row * 2, 0 , col * 2))
+            bpy.context.active_object.name = 'input'.format(row).format(col)
 
-#for row in range(10):
-#    bpy.ops.mesh.primitive_cube_add(location = (row * 6, col * 6 - 27, -50))# +27= ofset to center
-#    bpy.context.active_object.name = 'output'.format(row).format(col)
-#    
-#    
-#input_list_obj = []
-#hidden_list_obj = []
-#output_list_obj = []
-#input_list_location = []
-#hidden_list_location = []
-#output_list_location = []
+    for row in range(5):
+        for col in range(5):
+            bpy.ops.mesh.primitive_ico_sphere_add(location = (row * 13.5 ,  -25, col * 13.5), scale=(0.5, 0.5, 0.5))
+            bpy.context.active_object.name = 'hidden'.format(row).format(col)
 
-#for obj in bpy.data.objects:   
-#    if "input" in obj.name:
-#        input_list_obj.append(obj)
-#        input_list_location.append(obj.location)
-#    elif "hidden" in obj.name:
-#        hidden_list_obj.append(obj)
-#        hidden_list_location.append(obj.location)
-#    elif "output" in obj.name:
-#        output_list_obj.append(obj)
-#        output_list_location.append(obj.location)
+    for row in range(10):
+        bpy.ops.mesh.primitive_cube_add(location = (row * 6, -50, col * 6.75))
+        bpy.context.active_object.name = 'output'.format(row).format(col)
+    
+    input_list_obj = []
+    hidden_list_obj = []
+    output_list_obj = []
+    input_list_location = []
+    hidden_list_location = []
+    output_list_location = []
 
-#for cur in bpy.data.curves:
-#    bpy.data.curves.remove(cur)
+    for obj in bpy.data.objects:   
+        if "input" in obj.name:
+            input_list_obj.append(obj)
+            input_list_location.append(obj.location)
+        elif "hidden" in obj.name:
+            hidden_list_obj.append(obj)
+            hidden_list_location.append(obj.location)
+        elif "output" in obj.name:
+            output_list_obj.append(obj)
+            output_list_location.append(obj.location)
 
-#coords = []
-#for x in range(784):
-#    for y in range(100):
-#        #print(x,y)
-#        coords.extend((input_list_location[x],hidden_list_location[y]))
-#        
-#for x in range(100):
-#    for y in range(10):
-#        #print(x,y)
-#        coords.extend((hidden_list_location[x],output_list_location[y]))
+    return input_list_obj, hidden_list_obj, output_list_obj, input_list_location, hidden_list_location, output_list_location
+ 
+############################################################
+# Create Multiple Connections
+############################################################
 
+def create_connection_single(start, end, name):
+    coords = [start, end]
+    curveData = bpy.data.curves.new(name, type='CURVE')
+    curveData.dimensions = '3D'
+    curveData.resolution_u = 1
+    curveData.bevel_depth = 0.0125
 
-#curveData = bpy.data.curves.new('myCurve', type='CURVE')
-#curveData.dimensions = '3D'
-#curveData.resolution_u = 1
+    # map coords to spline
+    polyline = curveData.splines.new('POLY')
+    polyline.points.add(len(coords)-1)
+    for i, coord in enumerate(coords):
+        x,y,z = coord
+        polyline.points[i].co = (x, y, z, 1)
 
-## map coords to spline
-#polyline = curveData.splines.new('POLY')
-#polyline.points.add(len(coords)-1)
-#for i, coord in enumerate(coords):
-#    x,y,z = coord
-#    polyline.points[i].co = (x, y, z, 1)
+    # create Object
+    curveOB = bpy.data.objects.new(name, curveData)
 
-## create Object
-#curveOB = bpy.data.objects.new('myCurve', curveData)
-##curveData.bevel_depth = 0.01
+    # attach to scene and validate context
+    scn = bpy.context.scene
+    bpy.context.collection.objects.link(curveOB)
+    return curveOB
 
-## attach to scene and validate context
-#scn = bpy.context.scene
-#bpy.context.collection.objects.link(curveOB)
-## create the Curve Datablock
+############################################################
+# Create Complex Connection Object
+############################################################
+
+def create_connection_complex(start_location_list, end_location_list, name, start_size, end_size):
+    coords = []
+    for x in range(start_size):
+        for y in range(end_size):
+            coords.extend((start_location_list[x], end_location_list[y]))
+
+    curveData = bpy.data.curves.new(name, type='CURVE')
+    curveData.dimensions = '3D'
+    curveData.resolution_u = 1
+    curveData.extrude = 0.005
+
+    # map coords to spline
+    polyline = curveData.splines.new('POLY')
+    polyline.points.add(len(coords)-1)
+    for i, coord in enumerate(coords):
+        x,y,z = coord
+        polyline.points[i].co = (x, y, z, 1)
+
+    # create Object
+    curveOB = bpy.data.objects.new(name, curveData)
+
+    #Set active object to variable
+    #print(x,y)
+    material = bpy.data.materials.new(name = "Basic")
+    material.use_nodes = True
+    bpy.context.object.active_material = material
+    principled_node = material.node_tree.nodes.get("Principled BSDF")
+    principled_node.inputs[19].default_value = (1,1,1,1)
+
+    principled_node.inputs[20].default_value = 0.125
+        
+    curveOB.data.materials.append(material)
+    # attach to scene and validate context
+    scn = bpy.context.scene
+    bpy.context.collection.objects.link(curveOB)
+
+############################################################
+# Assign material based on argmax weight values
+############################################################
+
+def single_assign_weight(name, start_location_list, end_location_list, weight_value_list, start_size, end_size):
+    for x in range(start_size):
+        max_index = np.argmax(weight_value_list[x])
+        for y in range(end_size):
+            if(weight_value_list[x][max_index] == weight_value_list[x][y]):
+                curveOB = create_connection_single(start_location_list[x], end_location_list[y],"input_hidden")
+                material = bpy.data.materials.new(name = name)
+                material.use_nodes = True
+                bpy.context.object.active_material = material
+                principled_node = material.node_tree.nodes.get("Principled BSDF")
+                principled_node.inputs[19].default_value = (1,1,1,1)
+                principled_node.inputs[20].default_value = 10
+                curveOB.data.materials.append(material)
+
+############################################################
+# Main
+############################################################
+
+reset_data()
+
+#weight_list contains 1000 lists of weights
+weight_784_25_list, weight_25_10_list, train_images, train_labels = training()
+
+input_list_obj, hidden_list_obj, output_list_obj, input_list_location, hidden_list_location, output_list_location = create_nodes()
+
+single_assign_weight("input_hidden", input_list_location, hidden_list_location, weight_784_25_list, 784, 25)
+
+single_assign_weight("hidden_output", input_list_location, hidden_list_location, weight_25_10_list, 25, 10)
+
+create_connection_complex(input_list_location, hidden_list_location, "784_25_complex", 784, 25)
+
+create_connection_complex(hidden_list_location, output_list_location, "25_10_complex", 25, 10)
